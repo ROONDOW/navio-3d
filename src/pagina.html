@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Navio ao pôr do sol</title>
+<meta name="description" content="Galeão navegando num oceano ao pôr do sol, feito inteiramente em código com Three.js e shaders próprios.">
+<style>
+  html, body { margin: 0; height: 100%; background: #07060c; overflow: hidden; }
+  canvas { display: block; position: fixed; inset: 0; cursor: grab; opacity: 0; transition: opacity 1.2s ease; }
+  canvas:active { cursor: grabbing; }
+  body.pronto canvas { opacity: 1; }
+  .so-leitor { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  #sem-webgl { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; color: #f2e6d8;
+    font: 16px/1.5 system-ui, sans-serif; text-align: center; background: radial-gradient(#3a2440, #07060c); }
+  #sem-webgl[hidden] { display: none; }
+</style>
+</head>
+<body>
+<h1 class="so-leitor">Navio ao pôr do sol</h1>
+<p class="so-leitor">Cena 3D animada: um galeão de três mastros navega num oceano ao pôr do sol. Arraste para girar a câmera e use a roda do mouse para aproximar.</p>
+<div id="sem-webgl" hidden><div><strong>Não foi possível mostrar a cena 3D.</strong><br><span data-motivo></span><br>Abra num navegador atual, como Chrome, Edge ou Firefox.</div></div>
+<script>/*__BUNDLE__*/</script>
+</body>
+</html>
