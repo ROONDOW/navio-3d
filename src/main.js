@@ -20,6 +20,7 @@ function iniciar() {
 
   const C = CONFIG;
   const debug = new URLSearchParams(location.search).has('debug');
+  const cru = new URLSearchParams(location.search).has('cru'); // ?cru = sem pós-processamento (teste de silhueta)
   const movimentoReduzido = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
@@ -158,6 +159,7 @@ function iniciar() {
   const solTela = new THREE.Vector3();
   let percurso = 0, ultimoCeu = 0, ultimoAmbiente = 0;
   const amostrasDt = [];
+  const congelado = { ativo: false, t: null };
 
   let painel = null;
   if (debug) {
@@ -169,7 +171,8 @@ function iniciar() {
   renderer.info.autoReset = false;
 
   function quadro() {
-    const dt = Math.min(relogio.getDelta(), 0.05), t = relogio.elapsedTime + 12;
+    let dt = Math.min(relogio.getDelta(), 0.05), t = relogio.elapsedTime + 12;
+    if (congelado.ativo) { dt = 0; t = congelado.t ??= t; } else congelado.t = null; // gancho de teste: tempo parado
     percurso += C.mar.velocidadeNavio * dt;
     const agua = (x, z) => alturaDaAgua(x, z, t, percurso);
 
@@ -237,9 +240,8 @@ function iniciar() {
     const par = (contaQuadros++ & 1) === 0;
     if (par) desenharReflexo();                 // quadro par: reflexo do navio na água
     renderer.shadowMap.needsUpdate = !par;      // quadro ímpar: sombra (vela anda devagar; 1 quadro de atraso não se vê)
-    renderer.setRenderTarget(pos.principal); renderer.clear();
-    renderer.render(cena, camera);
-    pos.render(t);
+    if (cru) { renderer.setRenderTarget(null); renderer.clear(); renderer.render(cena, camera); }
+    else { renderer.setRenderTarget(pos.principal); renderer.clear(); renderer.render(cena, camera); pos.render(t); }
 
     // resolução adaptativa: média de 90 quadros decide se baixa ou sobe a escala
     amostrasDt.push(dt);
@@ -264,7 +266,7 @@ function iniciar() {
   requestAnimationFrame(quadro);
 
   // gancho de inspeção para os testes (medir sem depender de olho)
-  window.__navio = { renderer, camera, cam, navio, CONFIG: C, get escala() { return escala; } };
+  window.__navio = { renderer, camera, cam, navio, CONFIG: C, congelado, get escala() { return escala; } };
 }
 
 try { iniciar(); } catch (erro) { console.error(erro); semWebGL('Falha ao iniciar a cena 3D: ' + erro.message); }
