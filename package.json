@@ -1,17 +1,17 @@
 {
   "name": "navio-3d",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Galeão pirata num oceano vivo, em Three.js, num único index.html: casco, velas, cordame e texturas gerados em código.",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "node build.mjs"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "UNLICENSED",
   "type": "commonjs",
   "devDependencies": {
     "esbuild": "^0.28.2",
     "three": "^0.186.1"
-  }
+  },
+  "private": true
 }

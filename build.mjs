@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, statSync } from 'node:fs';
 const minify = !process.argv.includes('--legivel');
 const r = await build({
   entryPoints: ['src/main.js'], bundle: true, format: 'iife', write: false, minify,
-  target: 'es2020', legalComments: 'none', logLevel: 'warning',
+  target: 'es2020', legalComments: 'eof', logLevel: 'warning', // mantém o aviso de licença MIT do Three.js no index.html
 });
 const js = r.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 const html = readFileSync('src/pagina.html', 'utf8').replace('/*__BUNDLE__*/', () => js);
