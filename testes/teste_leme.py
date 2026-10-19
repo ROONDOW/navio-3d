@@ -18,6 +18,6 @@ if not d["bitacula"] < d["roda"] - 0.5:
     falhas.append(f"bitácula em z={d['bitacula']:.2f} não está à frente da roda (z={d['roda']:.2f}): o timoneiro teria de olhar para trás")
 if d["roda"] < d["pedestal"] < d["roda"] + 1.0:
     falhas.append(f"pedestal em z={d['pedestal']:.2f} ocupa o lugar do timoneiro (até 1 m atrás da roda)")
-print("disposição:", {k: round(v, 2) for k, v in d.items()})
+print("disposição:", {k: round(v, 2) for k, v in d.items() if isinstance(v, (int, float))})
 print("FALHOU:\n  " + "\n  ".join(falhas) if falhas else "PASSOU: bitácula à frente da roda, lugar do timoneiro livre")
 sys.exit(1 if falhas else 0)

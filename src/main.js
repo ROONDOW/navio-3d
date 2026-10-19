@@ -160,6 +160,33 @@ function iniciar() {
   let percurso = 0, ultimoCeu = 0, ultimoAmbiente = 0;
   const amostrasDt = [];
   const congelado = { ativo: false, t: null };
+  let tempoCena = 0;
+  const ritmo = movimentoReduzido ? 0.35 : 1; // movimento reduzido: câmera parada, mar e navio devagar
+  // a câmera não encosta em vela nem cabo: se a pose cair perto deles, ela recua ao longo do próprio raio
+  const zona = (() => {
+    const velas = [], cabos = [], q = new THREE.Vector3(), n = new THREE.Vector3();
+    for (const m of navio.velas) {
+      if (m.matrixAutoUpdate) m.updateMatrix();
+      const P = m.geometry.attributes.position, N = m.geometry.attributes.normal, A = m.geometry.attributes.aVela;
+      const Mn = new THREE.Matrix3().getNormalMatrix(m.matrix);
+      for (let i = 0; i < P.count; i++) {
+        q.fromBufferAttribute(P, i).applyMatrix4(m.matrix); n.fromBufferAttribute(N, i).applyMatrix3(Mn).normalize();
+        velas.push(q.x, q.y, q.z); q.addScaledVector(n, A.getX(i) * 1.15); velas.push(q.x, q.y, q.z);
+      }
+    }
+    for (const [a, b] of navio.cabos) {
+      const k = Math.max(1, Math.ceil(a.distanceTo(b) / 0.6));
+      for (let i = 0; i <= k; i++) { q.lerpVectors(a, b, i / k); cabos.push(q.x, q.y, q.z); }
+    }
+    const caixa = new THREE.Box3().setFromArray(velas).union(new THREE.Box3().setFromArray(cabos)).expandByScalar(2.5);
+    return { velas: new Float32Array(velas), cabos: new Float32Array(cabos), caixa, inv: new THREE.Matrix4(), p: new THREE.Vector3() };
+  })();
+  const encosta = (pos) => {
+    const p = zona.p.copy(pos).applyMatrix4(zona.inv);
+    if (!zona.caixa.containsPoint(p)) return false;
+    const perto = (arr, r2) => { for (let i = 0; i < arr.length; i += 3) { const dx = arr[i] - p.x, dy = arr[i + 1] - p.y, dz = arr[i + 2] - p.z; if (dx * dx + dy * dy + dz * dz < r2) return true; } return false; };
+    return perto(zona.velas, 2.2 * 2.2) || perto(zona.cabos, 1.0);
+  };
 
   let painel = null;
   if (debug) {
@@ -171,7 +198,9 @@ function iniciar() {
   renderer.info.autoReset = false;
 
   function quadro() {
-    let dt = Math.min(relogio.getDelta(), 0.05), t = relogio.elapsedTime + 12;
+    let dt = Math.min(relogio.getDelta(), 0.05) * ritmo;
+    if (!congelado.ativo) tempoCena += dt;
+    let t = tempoCena + 12;
     if (congelado.ativo) { dt = 0; t = congelado.t ??= t; } else congelado.t = null; // gancho de teste: tempo parado
     percurso += C.mar.velocidadeNavio * dt;
     const agua = (x, z) => alturaDaAgua(x, z, t, percurso);
@@ -180,7 +209,7 @@ function iniciar() {
     const Z0 = C.navio.zProa, L = C.navio.comprimento;
     const hProa = agua(0, Z0 + 3), hPopa = agua(0, Z0 + L - 3), hBb = agua(-4.2, Z0 + 15), hBe = agua(4.2, Z0 + 15), hMeio = agua(0, Z0 + 16);
     const alvoAlt = (hProa + hPopa + hBb + hBe + 2 * hMeio) / 6 - 0.1;
-    const alvoArf = Math.atan2(hProa - hPopa, L - 6) * 0.85;
+    const alvoArf = Math.atan2(hProa - hPopa, L - 6) * 0.75;
     const alvoJogo = Math.atan2(hBe - hBb, 8.4) * 0.6 + C.navio.adernamento;
     const passos = 3, h = dt / passos, N = C.navio;
     for (let i = 0; i < passos; i++) {
@@ -203,23 +232,29 @@ function iniciar() {
     // câmera
     const parado = relogio.elapsedTime - cam.ultimoToque;
     if (!cam.arrastando) { cam.az += cam.vaz; cam.vaz *= Math.pow(0.02, dt); } // inércia do arraste
-    if (!movimentoReduzido) cam.az += dt * CC.giroAutomatico * THREE.MathUtils.smoothstep(parado, CC.esperaParaGirar[0], CC.esperaParaGirar[1]);
+    if (!movimentoReduzido) cam.az += dt * CC.giroAutomatico * (1 + 0.45 * Math.sin(t * 0.047 + 0.8)) * THREE.MathUtils.smoothstep(parado, CC.esperaParaGirar[0], CC.esperaParaGirar[1]);
     // frequências que não se repetem: a câmera nunca refaz o mesmo caminho
-    const elAuto = CC.elevacao[0] + CC.elevacao[1] * Math.sin(t * 0.083 + 0.5) + 0.04 * Math.sin(t * 0.21);
-    const distAuto = CC.distancia[0] + CC.distancia[1] * Math.sin(t * 0.061 + 1.2);
+    const elAuto = movimentoReduzido ? CC.elevacao[0] : CC.elevacao[0] + CC.elevacao[1] * Math.sin(t * 0.083 + 0.5) + 0.04 * Math.sin(t * 0.21);
+    const distAuto = movimentoReduzido ? CC.distancia[0] : CC.distancia[0] + CC.distancia[1] * Math.sin(t * 0.061 + 1.2);
     if (cam.elUsuario !== null) {
       const volta = THREE.MathUtils.smoothstep(parado, CC.voltaAoPiloto[0], CC.voltaAoPiloto[1]);
       cam.el = THREE.MathUtils.lerp(cam.elUsuario, elAuto, volta);
       cam.dist = THREE.MathUtils.lerp(cam.distUsuario, distAuto, volta);
       if (volta >= 1) cam.elUsuario = null;
     } else { cam.el = elAuto; cam.dist = distAuto; }
-    alvoCam.set(0, 11.5 + estado.altura * 0.6, -3 + Math.sin(t * 0.05) * 3);
-    alvoSuave.lerp(alvoCam, 1 - Math.pow(0.05, dt));
+    if (movimentoReduzido) alvoCam.set(0, 11.5, -3); else alvoCam.set(0, 11.5 + estado.altura * 0.6, -3 + Math.sin(t * 0.05) * 3);
+    if (movimentoReduzido) alvoSuave.copy(alvoCam); else alvoSuave.lerp(alvoCam, 1 - Math.pow(0.05, dt));
     const ce = Math.cos(cam.el);
-    camera.position.set(alvoSuave.x + Math.sin(cam.az) * ce * cam.dist, alvoSuave.y + Math.sin(cam.el) * cam.dist - 6, alvoSuave.z + Math.cos(cam.az) * ce * cam.dist);
-    if (!movimentoReduzido) { camera.position.x += Math.sin(t * 0.53) * 0.35; camera.position.y += Math.sin(t * 0.41 + 1) * 0.3; } // mão no ombro
-    const piso = agua(camera.position.x, camera.position.z) + CC.alturaMinimaSobreAgua;
-    if (camera.position.y < piso) camera.position.y = piso;
+    const posicionar = (dist) => {
+      camera.position.set(alvoSuave.x + Math.sin(cam.az) * ce * dist, alvoSuave.y + Math.sin(cam.el) * dist - 6, alvoSuave.z + Math.cos(cam.az) * ce * dist);
+      if (!movimentoReduzido) { camera.position.x += Math.sin(t * 0.53) * 0.35; camera.position.y += Math.sin(t * 0.41 + 1) * 0.3; } // mão no ombro
+      const piso = agua(camera.position.x, camera.position.z) + CC.alturaMinimaSobreAgua;
+      if (camera.position.y < piso) camera.position.y = piso;
+    };
+    zona.inv.copy(navio.grupo.matrixWorld).invert();
+    let distReal = cam.dist;
+    posicionar(distReal);
+    for (let k = 0; k < 80 && encosta(camera.position); k++) posicionar(distReal += 0.6);
     camera.lookAt(alvoSuave); camera.updateMatrixWorld();
 
     sol.position.copy(C.sol.direcao).multiplyScalar(120).add(balanco.position);
@@ -266,7 +301,7 @@ function iniciar() {
   requestAnimationFrame(quadro);
 
   // gancho de inspeção para os testes (medir sem depender de olho)
-  window.__navio = { renderer, camera, cam, navio, CONFIG: C, congelado, get escala() { return escala; } };
+  window.__navio = { renderer, camera, cam, navio, CONFIG: C, congelado, gaivotas, borrifo, balanco, get percurso() { return percurso; }, get escala() { return escala; } };
 }
 
 try { iniciar(); } catch (erro) { console.error(erro); semWebGL('Falha ao iniciar a cena 3D: ' + erro.message); }

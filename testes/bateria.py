@@ -8,8 +8,9 @@
 4. silhueta legível sem pós (?cru): o navio contrasta com o fundo
 5. zero arquivo de modelo 3D no pacote
 6. sem WebGL: o aviso aparece
-7. prefers-reduced-motion: a câmera para de girar sozinha
-8. "existe mas não aparece": bandeira e flâmula visíveis na tela (pixels escuros/vermelhos no alto)
+7. prefers-reduced-motion: a câmera fica parada (posição, não só azimute) e o mar anda devagar
+9. peso medido pelo build (index ≤ 800 KiB; código nosso minificado ≤ 96 KiB)
+8. "existe mas não aparece": bandeira e flâmula visíveis, cada uma, em 3 poses (foto com × sem, tempo congelado)
 Sai com 1 se qualquer item reprovar.
 """
 import io, re, sys, pathlib
@@ -142,27 +143,45 @@ with sync_playwright() as pw:
     # 7: reduzir movimento
     c, pg, _ = abrir(nav, reduced_motion="reduce")
     pg.wait_for_function("window.__navio && document.body.classList.contains('pronto')", timeout=60000)
-    pg.evaluate("() => { window.__navio.cam.ultimoToque = -1e9; }")
-    az = pg.evaluate("async () => { const a = window.__navio.cam.az; await new Promise(r => setTimeout(r, 3000)); return window.__navio.cam.az - a; }")
-    item("7. prefers-reduced-motion: câmera não gira sozinha", abs(az) < 1e-3, f"azimute variou {az:.4f} rad em 3 s")
+    # mede a POSIÇÃO da câmera por 6 s (a rodada 2 achou 5 m de passeio com o azimute parado) e a velocidade do mar
+    MEDE = """async () => { const W = window.__navio; W.cam.ultimoToque = -1e9; const ini = W.camera.position.clone(); let maior = 0;
+      const p0 = W.CONFIG.mar.velocidadeNavio; const t0 = performance.now(); const u0 = (W.percurso ?? 0);
+      for (let i = 0; i < 60; i++) { await new Promise(r => setTimeout(r, 100)); maior = Math.max(maior, W.camera.position.distanceTo(ini)); }
+      return { maior, mar: ((W.percurso ?? 0) - u0) / ((performance.now() - t0) / 1000) }; }"""
+    m = pg.evaluate(MEDE)
+    item("7. prefers-reduced-motion: câmera parada e mar devagar", m["maior"] < 0.05 and 0.5 < m["mar"] < 4.0,
+         f"câmera andou até {m['maior']:.3f} m em 6 s; mar a {m['mar']:.2f} m/s (normal 7,5)")
+    c.close()
+    # controle doente do 7: sem reduzir movimento a mesma régua tem de ver a câmera andar e o mar a ~7,5 m/s
+    c, pg, _ = abrir(nav)
+    pg.wait_for_function("window.__navio && document.body.classList.contains('pronto')", timeout=60000)
+    m = pg.evaluate(MEDE)
+    item("7b. controle doente (sem reduzir: câmera anda, mar a toda)", m["maior"] > 0.05 and m["mar"] > 5.0,
+         f"câmera andou {m['maior']:.3f} m; mar a {m['mar']:.2f} m/s")
     c.close()
 
-    # 8: existe mas não aparece — par: vista geral com bandeira e flâmula × com as duas escondidas.
+    # 8: existe mas não aparece — CADA bandeira, em três poses, com o tempo congelado (ruído 0):
+    # foto com a peça × foto sem ela; conta os pixels que mudaram. A rodada 2 achou a flâmula com 193 px,
+    # enterrada na vela, escondida pela soma das duas num limiar só.
     c, pg, _ = abrir(nav, URL + "?escala=1")
     pg.wait_for_function("window.__navio && document.body.classList.contains('pronto')", timeout=60000)
-    pg.evaluate("() => { const c = window.__navio.cam; c.elUsuario = 0.16; c.distUsuario = 74; c.az = 2.45; c.vaz = 0; c.ultimoToque = 1e9; window.__navio.CONFIG.mar.velocidadeNavio = 0; }")
-    pg.wait_for_timeout(3000)
-    def topo_rgb():
-        rgb = np.asarray(Image.open(io.BytesIO(pg.screenshot(type="png"))).convert("RGB"), dtype=np.int32)
-        return rgb[: int(rgb.shape[0] * 0.25)]
-    def medidas(tp):
-        return int((tp.sum(axis=2) < 200).sum()), int(((tp[..., 0] > 110) & (tp[..., 1] < 60) & (tp[..., 2] < 60)).sum())
-    com_escuros, com_verm = medidas(topo_rgb())
-    pg.evaluate("() => { window.__navio.navio.velas.forEach(m => { if (m.geometry.attributes.aVela.getZ(0) > 0.5) m.visible = false; }); }")
-    pg.wait_for_timeout(800)
-    sem_escuros, sem_verm = medidas(topo_rgb())
-    item("8. bandeira e flâmula aparecem na tela", com_escuros - sem_escuros > 300 and com_verm - sem_verm > 50,
-         f"pixels escuros no topo {com_escuros} com × {sem_escuros} sem; vermelhos {com_verm} × {sem_verm}")
+    def rgb():
+        return np.asarray(Image.open(io.BytesIO(pg.screenshot(type="png"))).convert("RGB"), dtype=np.int32)
+    contagem = {"bandeira": [], "flâmula": []}
+    for az in (1.57, 2.45, 4.71):
+        pg.evaluate("(az) => { const W = window.__navio, c = W.cam; c.elUsuario = 0.16; c.distUsuario = 74; c.az = az; c.vaz = 0; c.ultimoToque = 1e9; W.congelado.ativo = true; }", az)
+        pg.wait_for_timeout(1500)
+        com = rgb()
+        for nome in contagem:
+            pg.evaluate("(n) => { window.__navio.navio.velas.forEach(m => { if (m.name === n) m.visible = false; }); }", nome)
+            pg.wait_for_timeout(400)
+            contagem[nome].append(int((np.abs(rgb() - com).max(axis=2) > 12).sum()))
+            pg.evaluate("(n) => { window.__navio.navio.velas.forEach(m => { if (m.name === n) m.visible = true; }); }", nome)
+            pg.wait_for_timeout(400)
+    ruido = None
+    pg.wait_for_timeout(400); a = rgb(); pg.wait_for_timeout(400); ruido = int((np.abs(rgb() - a).max(axis=2) > 12).sum())
+    ok8 = all(max(v) >= 300 and min(v) >= 60 for v in contagem.values()) and ruido == 0
+    item("8. bandeira e flâmula aparecem na tela (cada uma, 3 poses)", ok8, f"pixels que somem sem a peça (az 1,57 / 2,45 / 4,71): {contagem}; ruído entre fotos iguais: {ruido} px")
     c.close()
     nav.close()
 
@@ -171,6 +190,13 @@ pacote = (RAIZ / "index.html").read_text(encoding="utf-8")
 achados = re.findall(r"[\w./-]+\.(?:glb|gltf|fbx|obj)\b", pacote) + [str(f) for f in (RAIZ / "src").rglob("*") if f.suffix.lower() in (".glb", ".gltf", ".fbx", ".obj")]
 achados = [a for a in achados if not a.endswith(".obj") or "/" in a]  # ".obj" aparece em nomes de variável do Three; só caminho conta
 item("5. zero arquivo de modelo 3D", not achados, f"{len(achados)} referência(s)" + (f": {achados[:3]}" if achados else ""))
+
+# 9: peso medido pelo build (KiB = 1024 bytes; a régua não depende de unidade escrita na documentação)
+import json
+peso = json.loads((RAIZ / "testes" / "peso.json").read_text(encoding="utf-8"))
+item("9. peso: index.html ≤ 800 KiB e código nosso minificado ≤ 96 KiB",
+     peso["indexBytes"] <= 800 * 1024 and peso["nossoMinBytes"] <= 96 * 1024,
+     f"index {peso['indexBytes'] / 1024:.1f} KiB; nosso minificado {peso['nossoMinBytes'] / 1024:.1f} KiB (original: 72,1); fonte comentada {peso['fonteBytes'] / 1024:.1f} KiB")
 
 falhas = [r for r in resultados if not r[1]]
 print(f"\n{len(resultados) - len(falhas)}/{len(resultados)} itens OK")

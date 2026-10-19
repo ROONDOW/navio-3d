@@ -72,7 +72,8 @@ export function materialVela(mapa, { bandeira = false, cor = 0xffffff } = {}) {
 }
 
 // Grade de vela entre quatro cantos (a, b no topo; c, d embaixo), com os atributos da barriga.
-export function geometriaVela([a, b, c, d], frente, profundidade, fase, { nu = 18, nv = 16, bandeira = 0 } = {}) {
+// arco: quanto o meio da esteira sobe (roach), no eixo y local — só para velas redondas montadas em pé.
+export function geometriaVela([a, b, c, d], frente, profundidade, fase, { nu = 18, nv = 16, bandeira = 0, arco = 0 } = {}) {
   const pos = [], nrm = [], uv = [], tu = [], tv = [], vela = [], idx = [];
   const topo = new THREE.Vector3(), base = new THREE.Vector3(), p = new THREE.Vector3();
   const du = new THREE.Vector3(), dv = new THREE.Vector3(), nn = new THREE.Vector3();
@@ -81,6 +82,7 @@ export function geometriaVela([a, b, c, d], frente, profundidade, fase, { nu = 1
     for (let i = 0; i <= nu; i++) {
       const u = i / nu;
       topo.lerpVectors(a, b, u); base.lerpVectors(d, c, u); p.lerpVectors(topo, base, v);
+      if (arco) p.y += arco * Math.sin(Math.PI * u) * v * v * v;
       dv.subVectors(base, topo);
       du.subVectors(b, a).multiplyScalar(1 - v).add(new THREE.Vector3().subVectors(c, d).multiplyScalar(v));
       nn.crossVectors(du, dv);

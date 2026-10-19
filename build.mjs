@@ -13,3 +13,9 @@ writeFileSync('index.html', html);
 const nosso = ['config', 'glsl', 'ceu', 'mar', 'navio', 'velas', 'vida', 'texturas', 'pos', 'main']
   .reduce((s, f) => s + statSync(`src/${f}.js`).size, 0);
 console.log(`index.html: ${(statSync('index.html').size / 1024).toFixed(0)} KB (código nosso em src/: ${(nosso / 1024).toFixed(0)} KB)`);
+
+// régua do PRD: código nosso MINIFICADO, sem o Three (o original do Opus tem 73.866 bytes nessa conta)
+const so = await build({ entryPoints: ['src/main.js'], bundle: true, format: 'iife', write: false, minify: true,
+  external: ['three', 'three/*'], target: 'es2020', logLevel: 'error' });
+writeFileSync('testes/peso.json', JSON.stringify({ indexBytes: statSync('index.html').size, nossoMinBytes: so.outputFiles[0].contents.length, fonteBytes: nosso }));
+console.log(`código nosso minificado (sem o Three): ${(so.outputFiles[0].contents.length / 1024).toFixed(1)} KiB`);

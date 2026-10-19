@@ -77,24 +77,44 @@ export function criarGaivotas(n = 7) {
     return g;
   };
   const gBraco = asa(0.55, 0.32, 0.26, 0.05), gMao = asa(0.6, 0.26, 0.08, 0.2);
+  // esqueleto invisível (só Object3D) dá as matrizes; quem desenha são 5 InstancedMesh, uma por peça
+  const esqueleto = new THREE.Object3D();
+  const marcas = { corpo: [], cabeca: [], bico: [], braco: [], mao: [] };
+  const marca = (pai, tipo) => { const o = new THREE.Object3D(); pai.add(o); marcas[tipo].push(o); return o; };
   const aves = [];
   for (let i = 0; i < n; i++) {
-    const ave = new THREE.Group();
-    const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), branco); corpo.scale.set(1, 0.9, 3.2); ave.add(corpo);
-    const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), branco); cabeca.position.set(0, 0.05, -0.36); ave.add(cabeca);
-    const b = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.12, 5), bico); b.rotation.x = -Math.PI / 2; b.position.set(0, 0.04, -0.47); ave.add(b);
+    const ave = new THREE.Object3D();
+    marca(ave, 'corpo').scale.set(1, 0.9, 3.2);
+    marca(ave, 'cabeca').position.set(0, 0.05, -0.36);
+    const b = marca(ave, 'bico'); b.rotation.x = -Math.PI / 2; b.position.set(0, 0.04, -0.47);
     const asas = [];
     for (const lado of [-1, 1]) {
-      const ombro = new THREE.Group(); ombro.position.set(lado * 0.08, 0.03, -0.02); ombro.scale.x = lado;
-      ombro.add(new THREE.Mesh(gBraco, branco));
-      const pulso = new THREE.Group(); pulso.position.x = 0.55; ombro.add(pulso);
-      pulso.add(new THREE.Mesh(gMao, cinza)); // pontas escuras, como nas gaivotas de verdade
+      const ombro = new THREE.Object3D(); ombro.position.set(lado * 0.08, 0.03, -0.02); ombro.scale.x = lado;
+      marca(ombro, 'braco');
+      const pulso = new THREE.Object3D(); pulso.position.x = 0.55; ombro.add(pulso);
+      marca(pulso, 'mao'); // pontas escuras, como nas gaivotas de verdade
       ave.add(ombro); asas.push([ombro, pulso]);
     }
     ave.scale.setScalar(1.6);
-    grupo.add(ave);
+    esqueleto.add(ave);
     aves.push({ ave, asas, raio: 22 + Math.random() * 30, alt: 18 + Math.random() * 16, vel: (0.18 + Math.random() * 0.12) * (Math.random() < 0.5 ? 1 : -1),
       fase: Math.random() * 6.28, faseAsa: Math.random() * 6.28, cz: -10 + Math.random() * 20 });
+  }
+  const pecas = [
+    ['corpo', new THREE.SphereGeometry(0.12, 10, 8), branco], ['cabeca', new THREE.SphereGeometry(0.09, 8, 6), branco],
+    ['bico', new THREE.ConeGeometry(0.025, 0.12, 5), bico], ['braco', gBraco, branco], ['mao', gMao, cinza],
+  ].map(([tipo, geo, mat]) => {
+    const inst = new THREE.InstancedMesh(geo, mat, marcas[tipo].length);
+    inst.frustumCulled = false; // as aves rodeiam o navio: a caixa da geometria base não as contém
+    grupo.add(inst);
+    return { inst, lista: marcas[tipo] };
+  });
+  function publicar() {
+    esqueleto.updateMatrixWorld(true);
+    for (const { inst, lista } of pecas) {
+      lista.forEach((o, k) => inst.setMatrixAt(k, o.matrixWorld));
+      inst.instanceMatrix.needsUpdate = true;
+    }
   }
   function atualizar(t) {
     for (const a of aves) {
@@ -109,6 +129,7 @@ export function criarGaivotas(n = 7) {
         pulso.rotation.z = batendo ? Math.sin(t * 9 + a.faseAsa - 0.9) * 0.45 : -0.08;
       }
     }
+    publicar();
   }
   return { grupo, atualizar };
 }
