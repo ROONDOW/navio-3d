@@ -6,8 +6,8 @@
     "build": "node build.mjs"
   },
   "keywords": [],
-  "author": "",
-  "license": "UNLICENSED",
+  "author": "Vitor (ROONDOW)",
+  "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
     "esbuild": "^0.28.2",

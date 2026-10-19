@@ -81,6 +81,8 @@ uma cópia dela num servidor na porta 8731.
 
 ## Licenças
 
-O Three.js é MIT; o aviso dele fica no fim do `index.html` e em
-[LICENCAS/three.js-MIT.txt](LICENCAS/three.js-MIT.txt). O código deste repositório ainda não tem
-licença escolhida.
+Código deste repositório: **MIT**, © 2026 Vitor (ROONDOW) — veja [LICENSE](LICENSE). Pode usar,
+modificar e redistribuir, desde que mantenha o aviso de copyright e a licença.
+
+O Three.js também é MIT; o aviso dele fica no fim do `index.html` e em
+[LICENCAS/three.js-MIT.txt](LICENCAS/three.js-MIT.txt).
